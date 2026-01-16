@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MessageSquare, X, Send, Sparkles, Bot, Loader2, CheckCircle2 } from 'lucide-react';
+import { MessageSquare, X, Send, Sparkles, Bot, Loader2, CheckCircle2, MapPin, Globe, ExternalLink } from 'lucide-react';
 import { GoogleGenAI, Type, FunctionDeclaration, Chat } from "@google/genai";
 
 interface Message {
@@ -8,6 +8,7 @@ interface Message {
   role: 'user' | 'model';
   text: string;
   isStreaming?: boolean;
+  groundingMetadata?: any;
 }
 
 // Tool definition for the AI to "save" data
@@ -29,7 +30,7 @@ const submitLeadTool: FunctionDeclaration = {
 export const ChatAgent: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([
-    { id: 'init', role: 'model', text: "Hello. I'm Aura, the studio's intake agent. I can help you start a new project. To begin, may I have your name?" }
+    { id: 'init', role: 'model', text: "Hello. I'm Aura, the studio's intake agent. I can help you start a new project or answer questions about our location and services. How can I help?" }
   ]);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -44,10 +45,15 @@ export const ChatAgent: React.FC = () => {
       try {
         const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
         chatSessionRef.current = ai.chats.create({
-          model: 'gemini-3-pro-preview',
+          // Switched to gemini-2.5-flash to support Google Maps grounding
+          model: 'gemini-2.5-flash',
           config: {
-            systemInstruction: "You are Aura, the AI intake specialist for Aura Studio, a premium design agency. Your goal is to have a professional, concise, and elegant conversation with potential clients to collect project leads. Ask questions one by one to gather: Name, Project Description, Budget Range, and Timeline. Do not overwhelm the user. Once you have these details, call the 'submitProjectLead' tool to save the order. After the tool runs, confirm to the user that their request is logged and a human will follow up.",
-            tools: [{ functionDeclarations: [submitLeadTool] }],
+            systemInstruction: "You are Aura, the AI intake specialist for Aura Studio, a premium design agency. Your goal is to have a professional, concise, and elegant conversation. You can help users start a project by collecting: Name, Project Description, Budget Range, and Timeline. Use the 'submitProjectLead' tool to save these details. You also have access to Google Search and Google Maps. Use Search to find up-to-date info (e.g. 'latest design trends') and Maps to find locations (e.g. 'where is your SF office?' or 'design events nearby'). Always cite your sources.",
+            tools: [
+              { functionDeclarations: [submitLeadTool] },
+              { googleSearch: {} },
+              { googleMaps: {} }
+            ],
           },
         });
       } catch (error) {
@@ -91,6 +97,15 @@ export const ChatAgent: React.FC = () => {
             prev.map(msg => msg.id === botMsgId ? { ...msg, text: currentBotText } : msg)
           );
         }
+        
+        // Capture Grounding Metadata (Search/Maps sources)
+        if (chunk.candidates?.[0]?.groundingMetadata) {
+          const metadata = chunk.candidates[0].groundingMetadata;
+          setMessages(prev => 
+            prev.map(msg => msg.id === botMsgId ? { ...msg, groundingMetadata: metadata } : msg)
+          );
+        }
+
         if (chunk.functionCalls) {
           toolCalls = chunk.functionCalls;
         }
@@ -99,10 +114,9 @@ export const ChatAgent: React.FC = () => {
       // 2. Check for Function Calls (after first turn completes)
       if (toolCalls && toolCalls.length > 0) {
         // We have tool calls. The model might have paused generation.
-        // Update state to remove streaming flag from the prompt message
-         setMessages(prev => 
-            prev.map(msg => msg.id === botMsgId ? { ...msg, isStreaming: false } : msg)
-          );
+        setMessages(prev => 
+          prev.map(msg => msg.id === botMsgId ? { ...msg, isStreaming: false } : msg)
+        );
 
         const functionResponses = toolCalls.map((call: any) => {
           if (call.name === 'submitProjectLead') {
@@ -143,6 +157,13 @@ export const ChatAgent: React.FC = () => {
                     prev.map(msg => msg.id === followUpId ? { ...msg, text: followUpText } : msg)
                 );
             }
+             // Capture Grounding Metadata in follow-up too
+             if (chunk.candidates?.[0]?.groundingMetadata) {
+                const metadata = chunk.candidates[0].groundingMetadata;
+                setMessages(prev => 
+                  prev.map(msg => msg.id === followUpId ? { ...msg, groundingMetadata: metadata } : msg)
+                );
+              }
         }
         
         // Finalize
@@ -208,7 +229,7 @@ export const ChatAgent: React.FC = () => {
                     <h3 className="text-white font-semibold text-sm">Aura AI</h3>
                     <div className="flex items-center gap-1.5">
                         <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
-                        <span className="text-xs text-neutral-400">Gemini 3.0 Pro • Live</span>
+                        <span className="text-xs text-neutral-400">Gemini 2.5 Flash • Connected</span>
                     </div>
                 </div>
             </div>
@@ -218,7 +239,7 @@ export const ChatAgent: React.FC = () => {
               {messages.map((msg) => (
                 <div
                   key={msg.id}
-                  className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                  className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}
                 >
                   <div
                     className={`max-w-[85%] p-3.5 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap ${
@@ -232,6 +253,45 @@ export const ChatAgent: React.FC = () => {
                         <span className="inline-block w-1 h-3 ml-1 bg-indigo-400 animate-pulse align-middle"></span>
                     )}
                   </div>
+
+                  {/* Grounding Sources */}
+                  {msg.groundingMetadata?.groundingChunks && msg.groundingMetadata.groundingChunks.length > 0 && (
+                     <div className="mt-2 flex flex-wrap gap-2 max-w-[85%]">
+                        {msg.groundingMetadata.groundingChunks.map((chunk: any, i: number) => {
+                            if (chunk.web) {
+                                return (
+                                    <a 
+                                        key={i} 
+                                        href={chunk.web.uri} 
+                                        target="_blank" 
+                                        rel="noopener noreferrer" 
+                                        className="flex items-center gap-1.5 bg-white/5 hover:bg-white/10 border border-white/5 rounded-md px-2 py-1 text-[10px] text-indigo-300 transition-colors"
+                                    >
+                                        <Globe size={10} />
+                                        <span className="truncate max-w-[150px]">{chunk.web.title}</span>
+                                        <ExternalLink size={8} className="opacity-50" />
+                                    </a>
+                                );
+                            }
+                            if (chunk.maps) {
+                                return (
+                                    <a 
+                                        key={i} 
+                                        href={chunk.maps.uri} 
+                                        target="_blank" 
+                                        rel="noopener noreferrer" 
+                                        className="flex items-center gap-1.5 bg-white/5 hover:bg-white/10 border border-white/5 rounded-md px-2 py-1 text-[10px] text-green-300 transition-colors"
+                                    >
+                                        <MapPin size={10} />
+                                        <span className="truncate max-w-[150px]">{chunk.maps.title}</span>
+                                        <ExternalLink size={8} className="opacity-50" />
+                                    </a>
+                                );
+                            }
+                            return null;
+                        })}
+                     </div>
+                  )}
                 </div>
               ))}
               
@@ -267,7 +327,7 @@ export const ChatAgent: React.FC = () => {
                   value={inputValue}
                   onChange={(e) => setInputValue(e.target.value)}
                   onKeyDown={handleKeyPress}
-                  placeholder="Type your message..."
+                  placeholder="Ask about design, locations, or start a project..."
                   disabled={isLoading}
                   className="w-full bg-neutral-900 border border-white/10 rounded-full pl-5 pr-12 py-3.5 text-sm text-white focus:outline-none focus:border-indigo-500/50 transition-colors placeholder:text-neutral-600"
                 />
