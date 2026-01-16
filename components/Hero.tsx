@@ -2,6 +2,7 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { ArrowDown } from 'lucide-react';
 import { ShaderAnimation } from './ui/shader-animation';
+import { InteractiveHoverButton } from './ui/interactive-hover-button';
 
 export const Hero: React.FC = () => {
   return (
@@ -52,20 +53,17 @@ export const Hero: React.FC = () => {
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.8, delay: 0.5 }}
-          className="flex flex-col md:flex-row items-center justify-center gap-4"
+          className="flex flex-col md:flex-row items-center justify-center gap-6"
         >
-          <a
-            href="#contact"
-            className="px-8 py-4 bg-white text-black font-semibold rounded-full hover:scale-105 transition-transform duration-300"
-          >
-            Start a Project
-          </a>
-          <a
-            href="#work"
-            className="px-8 py-4 bg-transparent border border-white/20 text-white font-medium rounded-full hover:bg-white/5 transition-colors"
-          >
-            View Selected Work
-          </a>
+          <InteractiveHoverButton 
+            text="Start a Project" 
+            onClick={() => window.location.href = '#contact'}
+          />
+          <InteractiveHoverButton 
+            text="View Selected Work" 
+            onClick={() => window.location.href = '#work'}
+            className="border-white/5 bg-white/0"
+          />
         </motion.div>
       </div>
 

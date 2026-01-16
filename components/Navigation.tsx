@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Menu, X } from 'lucide-react';
 import { NavItem } from '../types';
+import { InteractiveHoverButton } from './ui/interactive-hover-button';
 
 const navItems: NavItem[] = [
   { label: 'Work', href: '#work' },
@@ -48,12 +49,10 @@ export const Navigation: React.FC = () => {
                 {item.label}
               </a>
             ))}
-            <a
-              href="#contact"
-              className="px-5 py-2.5 text-sm font-semibold bg-white text-black rounded-full hover:bg-neutral-200 transition-colors"
-            >
-              Start a Project
-            </a>
+            <InteractiveHoverButton 
+              text="Start a Project" 
+              onClick={() => window.location.href = '#contact'}
+            />
           </div>
 
           {/* Mobile Menu Toggle */}
