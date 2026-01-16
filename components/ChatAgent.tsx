@@ -43,16 +43,13 @@ export const ChatAgent: React.FC = () => {
   useEffect(() => {
     const initChat = async () => {
       try {
-        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+        const ai = new GoogleGenAI({ apiKey: process.env.NEXT_PUBLIC_GEMINI_API_KEY });
         chatSessionRef.current = ai.chats.create({
-          // Switched to gemini-2.5-flash to support Google Maps grounding
-          model: 'gemini-2.5-flash',
+          model: 'gemini-2.0-flash',
           config: {
-            systemInstruction: "You are Aura, the AI intake specialist for Aura Studio, a premium design agency. Your goal is to have a professional, concise, and elegant conversation. You can help users start a project by collecting: Name, Project Description, Budget Range, and Timeline. Use the 'submitProjectLead' tool to save these details. You also have access to Google Search and Google Maps. Use Search to find up-to-date info (e.g. 'latest design trends') and Maps to find locations (e.g. 'where is your SF office?' or 'design events nearby'). Always cite your sources.",
+            systemInstruction: "You are Aura, the AI intake specialist for Aura Studio, a premium design agency. Your goal is to have a professional, concise, and elegant conversation. You can help users start a project by collecting: Name, Project Description, Budget Range, and Timeline. Use the 'submitProjectLead' tool to save these details.",
             tools: [
-              { functionDeclarations: [submitLeadTool] },
-              { googleSearch: {} },
-              { googleMaps: {} }
+              { functionDeclarations: [submitLeadTool] }
             ],
           },
         });
@@ -118,18 +115,46 @@ export const ChatAgent: React.FC = () => {
           prev.map(msg => msg.id === botMsgId ? { ...msg, isStreaming: false } : msg)
         );
 
-        const functionResponses = toolCalls.map((call: any) => {
+        const functionResponses: Array<{ id: string; name: string; response: any }> = [];
+        for (const call of toolCalls) {
           if (call.name === 'submitProjectLead') {
-            console.log('--- LEAD CAPTURED ---', call.args);
-            setLeadSubmitted(true);
-            return {
-              id: call.id,
-              name: call.name,
-              response: { result: "Lead successfully saved to Aura Studio database." }
-            };
+            try {
+              const res = await fetch('/api/leads', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(call.args ?? {}),
+              });
+
+              if (res.ok) {
+                setLeadSubmitted(true);
+                functionResponses.push({
+                  id: call.id,
+                  name: call.name,
+                  response: { result: 'Lead successfully saved to Aura Studio database.' },
+                });
+              } else {
+                functionResponses.push({
+                  id: call.id,
+                  name: call.name,
+                  response: { result: 'Failed to save lead.' },
+                });
+              }
+            } catch (error) {
+              console.error('Failed to submit lead', error);
+              functionResponses.push({
+                id: call.id,
+                name: call.name,
+                response: { result: 'Failed to save lead.' },
+              });
+            }
+
+            continue;
           }
-          return { id: call.id, name: call.name, response: { result: "Error: Unknown tool" } };
-        });
+
+          functionResponses.push({ id: call.id, name: call.name, response: { result: 'Error: Unknown tool' } });
+        }
 
         // 3. Send Tool Response & Stream Follow-up
         const toolResponseParts = functionResponses.map((fr: any) => ({

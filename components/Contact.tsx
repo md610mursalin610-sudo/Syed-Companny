@@ -4,14 +4,34 @@ import { ArrowRight, Check } from 'lucide-react';
 
 export const Contact: React.FC = () => {
   const [formState, setFormState] = useState<'idle' | 'submitting' | 'success'>('idle');
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [projectType, setProjectType] = useState('UI/UX Design');
+  const [message, setMessage] = useState('');
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormState('submitting');
-    // Simulate API call
-    setTimeout(() => {
+
+    try {
+      const res = await fetch('/api/contact', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ name, email, projectType, message }),
+      });
+
+      if (!res.ok) {
+        setFormState('idle');
+        return;
+      }
+
       setFormState('success');
-    }, 1500);
+    } catch (error) {
+      console.error('Failed to submit contact form', error);
+      setFormState('idle');
+    }
   };
 
   return (
@@ -69,6 +89,8 @@ export const Contact: React.FC = () => {
                     type="text"
                     id="name"
                     required
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
                     className="w-full bg-neutral-900/50 border border-white/10 rounded-xl px-6 py-4 text-white focus:outline-none focus:border-indigo-500 transition-colors"
                     placeholder="John Doe"
                   />
@@ -79,6 +101,8 @@ export const Contact: React.FC = () => {
                     type="email"
                     id="email"
                     required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
                     className="w-full bg-neutral-900/50 border border-white/10 rounded-xl px-6 py-4 text-white focus:outline-none focus:border-indigo-500 transition-colors"
                     placeholder="john@company.com"
                   />
@@ -89,6 +113,8 @@ export const Contact: React.FC = () => {
                 <label htmlFor="type" className="text-sm text-neutral-400 ml-1">Project Type</label>
                 <select
                   id="type"
+                  value={projectType}
+                  onChange={(e) => setProjectType(e.target.value)}
                   className="w-full bg-neutral-900/50 border border-white/10 rounded-xl px-6 py-4 text-white focus:outline-none focus:border-indigo-500 transition-colors appearance-none"
                 >
                   <option>UI/UX Design</option>
@@ -104,6 +130,8 @@ export const Contact: React.FC = () => {
                   id="message"
                   required
                   rows={4}
+                  value={message}
+                  onChange={(e) => setMessage(e.target.value)}
                   className="w-full bg-neutral-900/50 border border-white/10 rounded-xl px-6 py-4 text-white focus:outline-none focus:border-indigo-500 transition-colors"
                   placeholder="Tell us about your project goals..."
                 ></textarea>
@@ -115,7 +143,7 @@ export const Contact: React.FC = () => {
                 className="w-full bg-white text-black font-bold text-lg rounded-xl py-4 hover:bg-neutral-200 transition-all transform hover:scale-[1.01] flex items-center justify-center gap-2"
               >
                 {formState === 'submitting' ? 'Sending...' : 'Send Request'}
-                {!formState && <ArrowRight size={20} />}
+                {formState !== 'submitting' && <ArrowRight size={20} />}
               </button>
             </motion.form>
           )}
