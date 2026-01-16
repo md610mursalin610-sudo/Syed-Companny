@@ -24,6 +24,7 @@ export function ShaderAnimation() {
     `
 
     // Fragment shader
+    // Fixed dynamic indexing warning by manually unrolling the color channel calculations
     const fragmentShader = `
       #define TWO_PI 6.2831853072
       #define PI 3.14159265359
@@ -38,13 +39,26 @@ export function ShaderAnimation() {
         float lineWidth = 0.002;
 
         vec3 color = vec3(0.0);
-        for(int j = 0; j < 3; j++){
-          for(int i=0; i < 5; i++){
-            color[j] += lineWidth*float(i*i) / abs(fract(t - 0.01*float(j)+float(i)*0.01)*5.0 - length(uv) + mod(uv.x+uv.y, 0.2));
-          }
+
+        for(int i=0; i < 5; i++){
+          float fi = float(i);
+          float numer = lineWidth * fi * fi;
+          // Calculate common denominator part
+          // Original: - length(uv) + mod(uv.x+uv.y, 0.2)
+          float geom = length(uv) - mod(uv.x+uv.y, 0.2);
+          
+          // Unrolled channel calculations to avoid dynamic indexing (color[j])
+          // Red (j=0)
+          color.r += numer / abs(fract(t + fi * 0.01) * 5.0 - geom);
+          
+          // Green (j=1)
+          color.g += numer / abs(fract(t - 0.01 + fi * 0.01) * 5.0 - geom);
+          
+          // Blue (j=2)
+          color.b += numer / abs(fract(t - 0.02 + fi * 0.01) * 5.0 - geom);
         }
         
-        gl_FragColor = vec4(color[0],color[1],color[2],1.0);
+        gl_FragColor = vec4(color, 1.0);
       }
     `
 

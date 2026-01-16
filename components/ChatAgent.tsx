@@ -1,20 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Sparkles, Bot, CornerDownLeft, CheckCircle2 } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { MessageSquare, X, Send, Sparkles, Bot, Loader2, CheckCircle2 } from 'lucide-react';
 import { GoogleGenAI, Type, FunctionDeclaration, Chat } from "@google/genai";
-import { Button } from "./ui/button";
-import {
-  ChatBubble,
-  ChatBubbleAvatar,
-  ChatBubbleMessage,
-} from "./ui/chat-bubble";
-import { ChatInput } from "./ui/chat-input";
-import {
-  ExpandableChat,
-  ExpandableChatHeader,
-  ExpandableChatBody,
-  ExpandableChatFooter,
-} from "./ui/expandable-chat";
-import { ChatMessageList } from "./ui/chat-message-list";
 
 interface Message {
   id: string;
@@ -40,6 +27,7 @@ const submitLeadTool: FunctionDeclaration = {
 };
 
 export const ChatAgent: React.FC = () => {
+  const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([
     { id: 'init', role: 'model', text: "Hello. I'm Aura, the studio's intake agent. I can help you start a new project. To begin, may I have your name?" }
   ]);
@@ -47,6 +35,7 @@ export const ChatAgent: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [leadSubmitted, setLeadSubmitted] = useState(false);
   
+  const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatSessionRef = useRef<Chat | null>(null);
 
   // Initialize Chat Session
@@ -68,8 +57,12 @@ export const ChatAgent: React.FC = () => {
     initChat();
   }, []);
 
-  const handleSendMessage = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
+  // Auto-scroll to bottom
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, isLoading, isOpen]);
+
+  const handleSendMessage = async () => {
     if (!inputValue.trim() || !chatSessionRef.current) return;
 
     const userText = inputValue;
@@ -89,8 +82,7 @@ export const ChatAgent: React.FC = () => {
       setMessages(prev => [...prev, { id: botMsgId, role: 'model', text: "", isStreaming: true }]);
 
       const result = await chatSessionRef.current.sendMessageStream({ message: userText });
-      
-      let toolCalls: any[] | undefined = undefined;
+      let toolCalls: any[] | undefined;
 
       for await (const chunk of result) {
         if (chunk.text) {
@@ -104,7 +96,7 @@ export const ChatAgent: React.FC = () => {
         }
       }
 
-      // 2. Check for Function Calls (after stream completes)
+      // 2. Check for Function Calls (after first turn completes)
       if (toolCalls && toolCalls.length > 0) {
         // We have tool calls. The model might have paused generation.
         // Update state to remove streaming flag from the prompt message
@@ -172,7 +164,7 @@ export const ChatAgent: React.FC = () => {
     }
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+  const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSendMessage();
@@ -180,97 +172,117 @@ export const ChatAgent: React.FC = () => {
   };
 
   return (
-    <div className="z-50">
-      <ExpandableChat
-        size="md"
-        position="bottom-right"
-        icon={<Bot className="h-8 w-8 text-white" />}
+    <>
+      {/* Floating Toggle Button */}
+      <motion.button
+        initial={{ scale: 0, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        transition={{ duration: 0.5, delay: 1 }}
+        onClick={() => setIsOpen(!isOpen)}
+        className={`fixed bottom-8 right-8 z-50 p-4 rounded-full shadow-2xl transition-all duration-300 ${
+            isOpen ? 'bg-neutral-800 rotate-90' : 'bg-gradient-to-r from-indigo-600 to-violet-600 hover:scale-110'
+        }`}
       >
-        <ExpandableChatHeader className="flex items-center gap-4">
-            <div className="w-10 h-10 rounded-full bg-indigo-500/20 flex items-center justify-center border border-indigo-500/30">
-                <Sparkles size={18} className="text-indigo-400" />
-            </div>
-            <div>
-                <h3 className="text-white font-semibold text-base">Aura AI</h3>
-                <div className="flex items-center gap-1.5">
-                    <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
-                    <span className="text-xs text-neutral-400">Gemini 3.0 Pro • Live</span>
+        {isOpen ? <X className="text-white" /> : <Bot className="text-white" />}
+        {!isOpen && (
+            <span className="absolute top-0 right-0 w-3 h-3 bg-green-400 border-2 border-background rounded-full animate-pulse"></span>
+        )}
+      </motion.button>
+
+      {/* Chat Window */}
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            initial={{ opacity: 0, y: 20, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 20, scale: 0.95 }}
+            transition={{ duration: 0.3 }}
+            className="fixed bottom-24 right-6 md:right-8 w-[calc(100vw-3rem)] md:w-96 h-[500px] z-50 bg-[#121212]/95 backdrop-blur-xl border border-white/10 rounded-3xl shadow-2xl flex flex-col overflow-hidden"
+          >
+            {/* Header */}
+            <div className="p-4 border-b border-white/5 flex items-center gap-3 bg-white/5">
+                <div className="w-8 h-8 rounded-full bg-indigo-500/20 flex items-center justify-center border border-indigo-500/30">
+                    <Sparkles size={16} className="text-indigo-400" />
+                </div>
+                <div>
+                    <h3 className="text-white font-semibold text-sm">Aura AI</h3>
+                    <div className="flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
+                        <span className="text-xs text-neutral-400">Gemini 3.0 Pro • Live</span>
+                    </div>
                 </div>
             </div>
-        </ExpandableChatHeader>
 
-        <ExpandableChatBody>
-          <ChatMessageList>
-            {messages.map((message) => (
-              <ChatBubble
-                key={message.id}
-                variant={message.role === "user" ? "sent" : "received"}
-              >
-                <ChatBubbleAvatar
-                  className="h-8 w-8 shrink-0 border border-white/10"
-                  src={
-                    message.role === "user"
-                      ? "https://api.dicebear.com/7.x/avataaars/svg?seed=Felix"
-                      : undefined
-                  }
-                  fallback={message.role === "user" ? "US" : "AI"}
-                />
-                <ChatBubbleMessage
-                  variant={message.role === "user" ? "sent" : "received"}
+            {/* Messages Area */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-4 no-scrollbar">
+              {messages.map((msg) => (
+                <div
+                  key={msg.id}
+                  className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
                 >
-                  {message.text}
-                  {message.isStreaming && (
-                    <span className="inline-block w-1.5 h-4 ml-1 bg-indigo-400 animate-pulse align-middle rounded-full"></span>
-                  )}
-                </ChatBubbleMessage>
-              </ChatBubble>
-            ))}
-
-            {/* Success Notification */}
-            {leadSubmitted && (
-                 <div className="flex justify-center py-2 mb-4">
+                  <div
+                    className={`max-w-[85%] p-3.5 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap ${
+                      msg.role === 'user'
+                        ? 'bg-indigo-600 text-white rounded-tr-none'
+                        : 'bg-neutral-800 text-neutral-200 rounded-tl-none border border-white/5'
+                    }`}
+                  >
+                    {msg.text}
+                    {msg.isStreaming && (
+                        <span className="inline-block w-1 h-3 ml-1 bg-indigo-400 animate-pulse align-middle"></span>
+                    )}
+                  </div>
+                </div>
+              ))}
+              
+              {/* Success Notification */}
+              {leadSubmitted && (
+                 <motion.div 
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="flex justify-center py-2"
+                 >
                      <div className="bg-green-500/10 border border-green-500/20 px-3 py-1.5 rounded-full flex items-center gap-2">
                          <CheckCircle2 size={12} className="text-green-400" />
                          <span className="text-xs text-green-400 font-medium">Order Saved to Database</span>
                      </div>
-                 </div>
+                 </motion.div>
               )}
 
-            {isLoading && !messages[messages.length - 1]?.isStreaming && messages[messages.length - 1]?.role === 'user' && (
-              <ChatBubble variant="received">
-                <ChatBubbleAvatar fallback="AI" className="border border-white/10"/>
-                <ChatBubbleMessage isLoading />
-              </ChatBubble>
-            )}
-          </ChatMessageList>
-        </ExpandableChatBody>
-
-        <ExpandableChatFooter>
-          <form
-            onSubmit={handleSendMessage}
-            className="relative rounded-xl border border-white/10 bg-black/40 focus-within:ring-1 focus-within:ring-indigo-500/50 p-1"
-          >
-            <ChatInput
-              value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Type your message..."
-              className="min-h-12 resize-none rounded-xl bg-transparent border-0 p-3 shadow-none focus-visible:ring-0 text-white placeholder:text-neutral-500"
-            />
-            <div className="flex items-center p-2 justify-end">
-              <Button 
-                type="submit" 
-                size="sm" 
-                className="ml-auto gap-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg"
-                disabled={!inputValue.trim() || isLoading}
-              >
-                Send
-                <CornerDownLeft className="size-3.5" />
-              </Button>
+              {isLoading && messages[messages.length - 1]?.role === 'user' && (
+                <div className="flex justify-start">
+                  <div className="bg-neutral-800 p-4 rounded-2xl rounded-tl-none border border-white/5">
+                    <Loader2 size={16} className="animate-spin text-neutral-400" />
+                  </div>
+                </div>
+              )}
+              <div ref={messagesEndRef} />
             </div>
-          </form>
-        </ExpandableChatFooter>
-      </ExpandableChat>
-    </div>
+
+            {/* Input Area */}
+            <div className="p-4 border-t border-white/5 bg-black/20">
+              <div className="relative">
+                <input
+                  type="text"
+                  value={inputValue}
+                  onChange={(e) => setInputValue(e.target.value)}
+                  onKeyDown={handleKeyPress}
+                  placeholder="Type your message..."
+                  disabled={isLoading}
+                  className="w-full bg-neutral-900 border border-white/10 rounded-full pl-5 pr-12 py-3.5 text-sm text-white focus:outline-none focus:border-indigo-500/50 transition-colors placeholder:text-neutral-600"
+                />
+                <button
+                  onClick={handleSendMessage}
+                  disabled={!inputValue.trim() || isLoading}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-indigo-600 text-white rounded-full disabled:opacity-50 disabled:cursor-not-allowed hover:bg-indigo-500 transition-colors"
+                >
+                  <Send size={14} />
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
   );
 };
